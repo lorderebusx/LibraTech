@@ -1,23 +1,24 @@
 package models;
 
-/**
- * Represents a librarian with administrative privileges.
- * Inherits from User.
- */
 public class Librarian extends User {
     private String employeeId;
 
-    public Librarian(String name, String employeeId) {
-        super(name);
+    public Librarian(String name, String password, String employeeId) {
+        super(name, password);
         this.employeeId = employeeId;
     }
 
-    // --- Getters and Setters ---
-    public String getEmployeeId() {
-        return employeeId;
+    public String getEmployeeId() { return employeeId; }
+
+    public String toCsvString() {
+        final String DELIMITER = ";";
+        return String.join(DELIMITER, employeeId, getName(), getPassword());
     }
 
-    public void setEmployeeId(String employeeId) {
-        this.employeeId = employeeId;
+    public static Librarian fromCsvString(String csvLine) {
+        final String DELIMITER = ";";
+        String[] parts = csvLine.split(DELIMITER);
+        return new Librarian(parts[1], parts[2], parts[0]);
     }
 }
+

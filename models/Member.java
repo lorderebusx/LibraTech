@@ -1,21 +1,20 @@
 package models;
 
-import java.util.ArrayList;
-import java.util.List;
 import interfaces.Searchable;
+import java.util.List;
 
-/**
- * Represents a library member who can borrow items.
- * Inherits from User and implements Searchable.
- */
 public class Member extends User implements Searchable {
+    private static int nextId = 1;
     private String memberId;
-    private List<Loan> loans;
 
-    public Member(String name, String memberId) {
-        super(name);
-        this.memberId = memberId;
-        this.loans = new ArrayList<>();
+    public Member(String name, String password) {
+        super(name, password);
+        this.memberId = "M" + String.format("%03d", nextId++);
+    }
+
+    private Member(String id, String name, String password) {
+        super(name, password);
+        this.memberId = id;
     }
     
     public void display() {
@@ -25,21 +24,35 @@ public class Member extends User implements Searchable {
 
     @Override
     public boolean matches(String query) {
-        String lowerCaseQuery = query.toLowerCase();
-        return getName().toLowerCase().contains(lowerCaseQuery) ||
-               memberId.toLowerCase().contains(lowerCaseQuery);
+        String lcQuery = query.toLowerCase();
+        return getName().toLowerCase().contains(lcQuery) || memberId.toLowerCase().contains(lcQuery);
+    }
+    
+    public String getMemberId() { return memberId; }
+
+    public String toCsvString() {
+        final String DELIMITER = ";";
+        return String.join(DELIMITER, memberId, getName(), getPassword());
     }
 
-    // --- Getters and Setters ---
-    public String getMemberId() {
-        return memberId;
+    public static Member fromCsvString(String csvLine) {
+        final String DELIMITER = ";";
+        String[] parts = csvLine.split(DELIMITER);
+        return new Member(parts[0], parts[1], parts[2]);
     }
 
-    public void setMemberId(String memberId) {
-        this.memberId = memberId;
-    }
-
-    public List<Loan> getLoans() {
-        return loans;
+    public static void syncNextId(List<User> users) {
+        if (users.isEmpty()) {
+            nextId = 1;
+            return;
+        }
+        int maxId = users.stream()
+            .filter(u -> u instanceof Member)
+            .map(u -> ((Member) u).getMemberId().replace("M", ""))
+            .mapToInt(Integer::parseInt)
+            .max()
+            .orElse(0);
+        nextId = maxId + 1;
     }
 }
+

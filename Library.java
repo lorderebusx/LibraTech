@@ -1,186 +1,190 @@
-import java.util.ArrayList;
-import java.util.List;
+import models.*;
+import data.*;
+import interfaces.Searchable;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
-
-import models.LibraryItem;
-import models.Member;
-import models.User;
-import models.Loan;
-import models.Fine;
-import models.ItemStatus;
-import interfaces.Searchable;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
 /**
- * Represents the core of the library system.
- * This class manages collections of items, members, and loans,
- * and contains the main business logic for library operations.
- * It acts as a Facade for the main application.
+ * The core engine of the system. This class acts as a facade,
+ * managing all data and business logic, and uses DataManager for persistence.
  */
 public class Library {
-    private List<LibraryItem> inventory = new ArrayList<>();
-    private List<User> users = new ArrayList<>();
-    private List<Loan> activeLoans = new ArrayList<>();
-    private List<Fine> outstandingFines = new ArrayList<>();
-    
-    public static final int BORROWING_DAYS_LIMIT = 14;
-    public static final double DAILY_FINE_AMOUNT = 0.25;
+
+    private List<LibraryItem> inventory;
+    private List<User> users;
+    private List<Loan> activeLoans;
+    private List<Fine> outstandingFines;
+    private DataManager dataManager;
+
+    public Library() {
+        this.dataManager = new DataManager();
+        this.outstandingFines = new ArrayList<>(); // Fines are calculated at runtime
+        
+        // Load all data from files
+        this.inventory = dataManager.loadLibraryItems();
+        this.users = dataManager.loadUsers();
+        this.activeLoans = dataManager.loadLoans(this.inventory, this.users);
+
+        // Sync static ID counters to prevent duplicates after loading
+        LibraryItem.syncNextId(inventory);
+        Member.syncNextId(users);
+    }
 
     // --- Item Management ---
     public void addLibraryItem(LibraryItem item) {
         inventory.add(item);
+        dataManager.saveLibraryItems(inventory);
+        System.out.println("Successfully added: " + item.getTitle());
     }
 
     public LibraryItem findItemById(String itemId) {
-        for (LibraryItem item : inventory) {
-            if (item.getItemId().equalsIgnoreCase(itemId)) {
-                return item;
-            }
-        }
-        return null;
+        return inventory.stream()
+            .filter(item -> item.getItemId().equalsIgnoreCase(itemId))
+            .findFirst()
+            .orElse(null);
     }
-    
+
     public void listAllItems() {
         if (inventory.isEmpty()) {
-            System.out.println("No items in the library inventory.");
+            System.out.println("The library inventory is empty.");
             return;
         }
-        for (LibraryItem item : inventory) {
+        inventory.forEach(item -> {
             item.display();
-            System.out.println("---");
-        }
+            System.out.println("--------------------");
+        });
     }
-    
+
     // --- Member Management ---
     public void registerMember(Member member) {
         users.add(member);
+        dataManager.saveUsers(users);
+        System.out.println("Successfully registered member: " + member.getName() + " with ID " + member.getMemberId());
     }
-    
+
     public Member findMemberById(String memberId) {
-        for (User user : users) {
-            // Check if the user is a Member and if the ID matches
-            if (user instanceof Member && ((Member) user).getMemberId().equalsIgnoreCase(memberId)) {
-                return (Member) user;
-            }
-        }
-        return null;
+        return users.stream()
+            .filter(user -> user instanceof Member && ((Member) user).getMemberId().equalsIgnoreCase(memberId))
+            .map(user -> (Member) user)
+            .findFirst()
+            .orElse(null);
     }
 
     public void listAllMembers() {
-        boolean foundMembers = false;
+        boolean found = false;
         for (User user : users) {
             if (user instanceof Member) {
                 ((Member) user).display();
-                System.out.println("---");
-                foundMembers = true;
+                System.out.println("--------------------");
+                found = true;
             }
         }
-        if (!foundMembers) {
-            System.out.println("No members registered in the system.");
+        if (!found) {
+            System.out.println("No members have been registered.");
         }
     }
-    
-    // --- Borrowing and Returning Logic ---
-    public void borrowItem(String memberId, String itemId) throws Exception {
+
+    // --- Loan Management ---
+    public void borrowItem(String memberId, String itemId) {
         Member member = findMemberById(memberId);
         if (member == null) {
-            throw new Exception("Member not found.");
+            System.out.println("Error: No member found with ID " + memberId);
+            return;
         }
 
         LibraryItem item = findItemById(itemId);
         if (item == null) {
-            throw new Exception("Item not found.");
+            System.out.println("Error: No item found with ID " + itemId);
+            return;
         }
 
         if (item.getStatus() != ItemStatus.AVAILABLE) {
-            throw new Exception("Item is currently not available for borrowing.");
+            System.out.println("Error: Item '" + item.getTitle() + "' is currently unavailable.");
+            return;
         }
 
         LocalDate borrowDate = LocalDate.now();
-        LocalDate dueDate = borrowDate.plusDays(BORROWING_DAYS_LIMIT);
-        
+        LocalDate dueDate = borrowDate.plusDays(14);
         Loan newLoan = new Loan(item, member, borrowDate, dueDate);
         activeLoans.add(newLoan);
         item.setStatus(ItemStatus.BORROWED);
+
+        dataManager.saveLibraryItems(inventory);
+        dataManager.saveLoans(activeLoans);
+        System.out.println("Successfully loaned '" + item.getTitle() + "' to " + member.getName() + ".");
+        System.out.println("Due Date: " + dueDate);
     }
+    
+    public void returnItem(String itemId) {
+        Optional<Loan> loanToCloseOpt = activeLoans.stream()
+            .filter(loan -> loan.getItem().getItemId().equalsIgnoreCase(itemId))
+            .findFirst();
 
-    public void returnItem(String itemId) throws Exception {
-        Loan loanToClose = null;
-        for (Loan loan : activeLoans) {
-            if (loan.getItem().getItemId().equalsIgnoreCase(itemId)) {
-                loanToClose = loan;
-                break;
-            }
+        if (!loanToCloseOpt.isPresent()) {
+            System.out.println("Error: No active loan found for item ID " + itemId);
+            return;
         }
 
-        if (loanToClose == null) {
-            throw new Exception("No active loan found for this item ID.");
-        }
+        Loan loanToClose = loanToCloseOpt.get();
+        LibraryItem item = loanToClose.getItem();
+        item.setStatus(ItemStatus.AVAILABLE);
 
-        // Check for fines
         LocalDate returnDate = LocalDate.now();
         if (returnDate.isAfter(loanToClose.getDueDate())) {
             long daysOverdue = ChronoUnit.DAYS.between(loanToClose.getDueDate(), returnDate);
-            double fineAmount = daysOverdue * DAILY_FINE_AMOUNT;
+            double fineAmount = daysOverdue * 0.25;
             Fine newFine = new Fine(loanToClose, fineAmount);
             outstandingFines.add(newFine);
-            System.out.println("Item is overdue. A fine of $" + String.format("%.2f", fineAmount) + " has been issued.");
+            System.out.println("Item is overdue by " + daysOverdue + " days. A fine of $" + String.format("%.2f", fineAmount) + " has been assessed.");
         }
 
-        loanToClose.getItem().setStatus(ItemStatus.AVAILABLE);
         activeLoans.remove(loanToClose);
+        dataManager.saveLibraryItems(inventory);
+        dataManager.saveLoans(activeLoans);
+        System.out.println("Successfully returned '" + item.getTitle() + "'.");
+    }
+
+    public void listActiveLoans() {
+        if (activeLoans.isEmpty()) {
+            System.out.println("There are no items currently on loan.");
+            return;
+        }
+        System.out.println("--- Active Loans ---");
+        activeLoans.forEach(loan -> {
+            System.out.println("Item: " + loan.getItem().getTitle() + " (ID: " + loan.getItem().getItemId() + ")");
+            System.out.println("Member: " + loan.getMember().getName() + " (ID: " + loan.getMember().getMemberId() + ")");
+            System.out.println("Due Date: " + loan.getDueDate());
+            System.out.println("--------------------");
+        });
     }
     
-    // --- Reporting and Searching ---
-    
-    public void listOverdueItems() {
-        boolean foundOverdue = false;
-        LocalDate today = LocalDate.now();
-        for (Loan loan : activeLoans) {
-            if (today.isAfter(loan.getDueDate())) {
-                System.out.println("Item: " + loan.getItem().getTitle() + " (ID: " + loan.getItem().getItemId() + ")");
-                System.out.println("Member: " + loan.getMember().getName() + " (ID: " + loan.getMember().getMemberId() + ")");
-                System.out.println("Due Date: " + loan.getDueDate());
-                long daysOverdue = ChronoUnit.DAYS.between(loan.getDueDate(), today);
-                System.out.println("Days Overdue: " + daysOverdue);
-                System.out.println("---");
-                foundOverdue = true;
-            }
-        }
-        if (!foundOverdue) {
-            System.out.println("No items are currently overdue.");
-        }
-    }
-    
+    // --- Search ---
     public void search(String query) {
-        System.out.println("Searching Items...");
+        System.out.println("\n--- Search Results for '" + query + "' ---");
         boolean found = false;
+
         for (LibraryItem item : inventory) {
             if (item.matches(query)) {
                 item.display();
-                System.out.println("---");
+                System.out.println("--------------------");
+                found = true;
+            }
+        }
+        
+        for (User user : users) {
+            if (user instanceof Searchable && ((Searchable) user).matches(query)) {
+                if (user instanceof Member) ((Member)user).display();
+                System.out.println("--------------------");
                 found = true;
             }
         }
 
-        System.out.println("\nSearching Members...");
-        for (User user : users) {
-             if (user instanceof Searchable && ((Searchable)user).matches(query)) {
-                 if (user instanceof Member) {
-                     ((Member)user).display();
-                 }
-                 System.out.println("---");
-                 found = true;
-             }
-        }
-
         if (!found) {
-            System.out.println("No results found for '" + query + "'.");
+            System.out.println("No items or members found matching your query.");
         }
-    }
-
-    // Getter for demo data setup
-    public List<Loan> getActiveLoans() {
-        return this.activeLoans;
     }
 }
+

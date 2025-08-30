@@ -1,20 +1,21 @@
 package models;
 
-/**
- * Represents a Book, a specific type of LibraryItem.
- * This demonstrates INHERITANCE.
- */
 public class Book extends LibraryItem {
     private String author;
     private String isbn;
 
     public Book(String title, String author, String isbn) {
-        super(title); // Call the constructor of the parent class
+        super(title);
         this.author = author;
         this.isbn = isbn;
     }
 
-    // --- Implementation of the abstract method ---
+    private Book(String id, String title, String author, String isbn, ItemStatus status) {
+        super(id, title, status);
+        this.author = author;
+        this.isbn = isbn;
+    }
+
     @Override
     public void display() {
         System.out.println("Type: Book");
@@ -25,31 +26,21 @@ public class Book extends LibraryItem {
         System.out.println("Status: " + getStatus());
     }
     
-    // --- Overriding for more specific search ---
     @Override
     public boolean matches(String query) {
-        String lowerCaseQuery = query.toLowerCase();
-        // Check parent's matches() method first, then check specific fields
-        return super.matches(lowerCaseQuery) || 
-               author.toLowerCase().contains(lowerCaseQuery) ||
-               isbn.toLowerCase().contains(lowerCaseQuery);
+        String lcQuery = query.toLowerCase();
+        return super.matches(lcQuery) || author.toLowerCase().contains(lcQuery) || isbn.toLowerCase().contains(lcQuery);
+    }
+    
+    public String toCsvString() {
+        final String DELIMITER = ";";
+        return String.join(DELIMITER, getItemId(), getTitle(), author, isbn, getStatus().toString());
     }
 
-    // --- Getters and Setters ---
-    public String getAuthor() {
-        return author;
-    }
-
-    public void setAuthor(String author) {
-        this.author = author;
-    }
-
-    public String getIsbn() {
-        return isbn;
-    }
-
-    public void setIsbn(String isbn) {
-        this.isbn = isbn;
+    public static Book fromCsvString(String csvLine) {
+        final String DELIMITER = ";";
+        String[] parts = csvLine.split(DELIMITER);
+        return new Book(parts[0], parts[1], parts[2], parts[3], ItemStatus.valueOf(parts[4]));
     }
 }
 

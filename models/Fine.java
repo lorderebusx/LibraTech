@@ -1,34 +1,36 @@
 package models;
 
-/**
- * Represents a fine assessed for an overdue loan.
- * Demonstrates COMPOSITION.
- */
+import java.time.LocalDate;
+
 public class Fine {
-    private Loan associatedLoan;
-    private double fineAmount;
+    
+    private final Loan associatedLoan;
+    private final double amount;
     private boolean isPaid;
+    @SuppressWarnings("unused")
+    private final LocalDate dateAssessed;
 
-    public Fine(Loan associatedLoan, double fineAmount) {
-        this.associatedLoan = associatedLoan;
-        this.fineAmount = fineAmount;
-        this.isPaid = false; // Fines are unpaid by default
+    public Fine(Loan loan, double amount) {
+        this.associatedLoan = loan;
+        this.amount = amount;
+        this.isPaid = false;
+        this.dateAssessed = LocalDate.now();
     }
 
-    // --- Getters and Setters ---
-    public Loan getAssociatedLoan() {
-        return associatedLoan;
+    public Member getMember() {
+        return associatedLoan.getMember();
     }
 
-    public double getFineAmount() {
-        return fineAmount;
+    public double getAmount() {
+        return amount;
     }
 
     public boolean isPaid() {
         return isPaid;
     }
 
-    public void setPaid(boolean isPaid) {
-        this.isPaid = isPaid;
+    public void markAsPaid() {
+        this.isPaid = true;
     }
 }
+

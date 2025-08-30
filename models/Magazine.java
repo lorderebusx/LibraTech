@@ -8,6 +8,11 @@ public class Magazine extends LibraryItem {
         this.issueDate = issueDate;
     }
 
+    private Magazine(String id, String title, String issueDate, ItemStatus status) {
+        super(id, title, status);
+        this.issueDate = issueDate;
+    }
+
     @Override
     public void display() {
         System.out.println("Type: Magazine");
@@ -17,20 +22,15 @@ public class Magazine extends LibraryItem {
         System.out.println("Status: " + getStatus());
     }
 
-    // --- Overriding for more specific search ---
-    @Override
-    public boolean matches(String query) {
-        String lowerCaseQuery = query.toLowerCase();
-        return super.matches(lowerCaseQuery) || 
-               issueDate.toLowerCase().contains(lowerCaseQuery);
+    public String toCsvString() {
+        final String DELIMITER = ";";
+        return String.join(DELIMITER, getItemId(), getTitle(), issueDate, getStatus().toString());
     }
 
-    // --- Getters and Setters ---
-    public String getIssueDate() {
-        return issueDate;
-    }
-
-    public void setIssueDate(String issueDate) {
-        this.issueDate = issueDate;
+    public static Magazine fromCsvString(String csvLine) {
+        final String DELIMITER = ";";
+        String[] parts = csvLine.split(DELIMITER);
+        return new Magazine(parts[0], parts[1], parts[2], ItemStatus.valueOf(parts[3]));
     }
 }
+

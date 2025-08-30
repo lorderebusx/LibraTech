@@ -1,12 +1,8 @@
 package models;
 
 import java.time.LocalDate;
+import java.util.List;
 
-/**
- * Represents a loan transaction.
- * This class demonstrates COMPOSITION, as a Loan is "composed of"
- * a LibraryItem and a Member.
- */
 public class Loan {
     private LibraryItem item;
     private Member member;
@@ -20,20 +16,29 @@ public class Loan {
         this.dueDate = dueDate;
     }
 
-    // --- Getters ---
-    public LibraryItem getItem() {
-        return item;
+    public LibraryItem getItem() { return item; }
+    public Member getMember() { return member; }
+    public LocalDate getDueDate() { return dueDate; }
+    
+    public String toCsvString() {
+        final String DELIMITER = ";";
+        return String.join(DELIMITER, item.getItemId(), member.getMemberId(), borrowDate.toString(), dueDate.toString());
     }
 
-    public Member getMember() {
-        return member;
-    }
+    public static Loan fromCsvString(String csvLine, List<LibraryItem> allItems, List<User> allUsers) {
+        final String DELIMITER = ";";
+        String[] parts = csvLine.split(DELIMITER);
+        String itemId = parts[0];
+        String memberId = parts[1];
 
-    public LocalDate getBorrowDate() {
-        return borrowDate;
-    }
+        LibraryItem item = allItems.stream().filter(i -> i.getItemId().equals(itemId)).findFirst().orElse(null);
+        Member member = allUsers.stream()
+            .filter(u -> u instanceof Member && ((Member) u).getMemberId().equals(memberId))
+            .map(u -> (Member) u).findFirst().orElse(null);
 
-    public LocalDate getDueDate() {
-        return dueDate;
+        if (item == null || member == null) return null;
+        
+        return new Loan(item, member, LocalDate.parse(parts[2]), LocalDate.parse(parts[3]));
     }
 }
+
